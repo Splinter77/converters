@@ -3,35 +3,58 @@
 # Run line before executing this script
 # chmod +x GoProBatchConverts.sh
 
-# This script exists to run updater.ps1 without hassle
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Define input and output directories
+input_folder="/path/to/DCIM/100GOPRO"
+output_folder="/path/to/GoProConvertedVideos"
 
-# Check for updater script location
-if [ -f "${SCRIPT_DIR}/installer/updater.ps1" ]; then
-    UPDATER_SCRIPT="${SCRIPT_DIR}/installer/updater.ps1"
-else
-    UPDATER_SCRIPT="${SCRIPT_DIR}/updater.ps1"
+# Check if input directory exists
+if [ ! -d "$input_folder" ]; then
+    echo "Error: Input folder does not exist: $input_folder"
+    exit 1
 fi
 
-# Check if pwsh (PowerShell Core) is installed
-if command -v pwsh >/dev/null 2>&1; then
-    # pwsh is available, use PowerShell Core
-    pwsh -NoProfile -NoLogo -ExecutionPolicy Bypass -File "${UPDATER_SCRIPT}"
-else
-    # Check if standard powershell is available as fallback
-    if command -v powershell >/dev/null 2>&1; then
-        # Use standard PowerShell
-        powershell -NoProfile -NoLogo -ExecutionPolicy Bypass -File "${UPDATER_SCRIPT}"
-    else
-        echo "Error: Neither PowerShell Core (pwsh) nor PowerShell is installed"
+# Create output directory if it doesn't exist
+if [ ! -d "$output_folder" ]; then
+    mkdir -p "$output_folder"
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to create output folder: $output_folder"
         exit 1
     fi
 fi
 
-# Clean up duplicate updater script if it exists
-if [ -f "${SCRIPT_DIR}/installer/updater.ps1" ] && [ -f "${SCRIPT_DIR}/updater.ps1" ]; then
-    rm "${SCRIPT_DIR}/updater.ps1"
+# Check if ffmpeg is installed
+if ! command -v ffmpeg &> /dev/null; then
+    echo "Error: ffmpeg is not installed. Please install it first."
+    exit 1
 fi
 
-# Wait for 5 seconds
-sleep 5
+# Process all MP4 files in the input folder
+for input_file in "$input_folder"/*.mp4; do
+    # Check if there are any matching files
+    if [ ! -e "$input_file" ]; then
+        echo "No MP4 files found in $input_folder"
+        exit 0
+    fi
+    
+    # Get the filename without path and extension
+    filename=$(basename "$input_file" .mp4)
+    
+    # Convert the video
+    echo "Converting: $input_file"
+    ffmpeg -i "$input_file" \
+           -c:v libx265 \
+           -crf 28 \
+           -preset medium \
+           -c:a aac \
+           -b:a 128k \
+           "$output_folder/${filename}_converted.mp4"
+    
+    # Check if conversion was successful
+    if [ $? -eq 0 ]; then
+        echo "Successfully converted: ${filename}_converted.mp4"
+    else
+        echo "Error converting: $input_file"
+    fi
+done
+
+echo "All conversions complete!"
